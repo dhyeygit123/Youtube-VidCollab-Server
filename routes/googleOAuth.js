@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { google } = require('googleapis');
 const authMiddleware = require('../middleware/auth');
 const User = require('../models/User');
-
+require("dotenv").config();
 const router = express.Router();
 
 const SCOPES = [
