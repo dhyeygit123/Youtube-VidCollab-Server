@@ -1,6 +1,6 @@
 // config/googleDrive.js
 const { google } = require('googleapis');
-
+require("dotenv").config();
 function getOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
