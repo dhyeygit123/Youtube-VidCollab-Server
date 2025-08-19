@@ -40,7 +40,7 @@ router.get('/connect', authMiddleware, async (req, res) => {
   res.json({ url });
 });
 
-
+console.log("Redirecting user to Google with redirect_uri:", process.env.GOOGLE_REDIRECT_URI);
 // 2) Google redirects here after consent
 router.get('/oauth2callback', async (req, res) => {
   try {
