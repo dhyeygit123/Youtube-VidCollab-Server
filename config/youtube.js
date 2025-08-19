@@ -1,6 +1,6 @@
 // config/youtube.js
 const { google } = require('googleapis');
-
+require("dotenv").config();
 async function youtubeFor(user) {
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
