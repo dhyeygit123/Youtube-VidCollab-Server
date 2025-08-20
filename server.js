@@ -23,8 +23,16 @@ app.use('/api/auth', authRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/google', googleRoutes); 
+
+
+app.get("/api/test", (req, res) => {
+  res.json({ ok: true, source: "vercel" });
+});
+
 // Start server
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log("Running locally on port " + PORT));
+}
 
 module.exports = app;
