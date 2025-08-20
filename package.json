@@ -16,9 +16,12 @@
   "name": "server",
   "version": "1.0.0",
   "main": "server.js",
+  "engines": {
+    "node" : "22.x"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon server.js"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
