@@ -9,7 +9,15 @@ const DbConfig = require("./config/db");
 const app = express();
 require("dotenv").config();
 
-DbConfig();
+(async () => {
+  try {
+    await DbConfig(); // Call connectDB
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error.message);
+    // Optionally, you can return a fallback response or shut down gracefully
+  }
+})();
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -24,5 +32,4 @@ app.use('/api/video', videoRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/google', googleRoutes); 
 
-// Export the app for Vercel
 module.exports = app;
