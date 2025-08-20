@@ -24,5 +24,7 @@ app.use('/api/video', videoRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/google', googleRoutes); 
 // Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// const PORT = process.env.PORT || 5000;
+// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+module.exports = app;
