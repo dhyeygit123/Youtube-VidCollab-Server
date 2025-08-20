@@ -7,6 +7,7 @@ const { validateSignup, validateLogin } = require('../middleware/validate');
 const router = express.Router();
 const { sendNotificationEmail } = require('../utils/mail');
 const authMiddleware = require('../middleware/auth');
+const Invite = require('../models/Invite');
 
 router.get('/me', authMiddleware, async (req, res) => {
   try {
@@ -126,32 +127,45 @@ The Video Editing Platform Team
 
 // Login route
 router.post('/login', validateLogin, async (req, res) => {
-  const { email, password, role } = req.body;
+  const { email, password, role, youtuberId } = req.body;
 
   try {
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
     
+    if (!user) {
+      return res.status(400).json({ message: 'No user found! Please Sign in First' });
+    }
+
     if (user.status !== 'active') {
       return res.status(403).json({
         message: 'Your account has been deactivated by the channel owner. Please contact them to regain access.'
       });
     }
-    
-
     if(user.role !== role){
       return res.status(400).json({ message : "Unauthorized Role"});
     }
+    // console.log(user);
+    if(role === "editor"){
+    const invite = await Invite.findOne({ email });
+    // console.log(invite);
+      if (!invite) return res.status(400).json({ message: "No pending invite found" })
 
+    if(invite.status === "pending"){
+      return res.status(400).json({ message : "Please wait for invite acceptance"});
+    }
+    
+    if(invite.youtuberId.toString() !== youtuberId){
+      return res.status(400).json({ message : "Invalid YoutuberId! Please Enter the Correct ID"});
+    }
+  }
+  
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({message : "Invalid Credentials, Please Check your Password and Email"})
     }
 
     const token = jwt.sign({ email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, role: user.role });
+    res.json({ token, role: user.role , email : user.email});
   } catch (error) {
     res.status(500).json({ message: 'Error logging in' });
   }

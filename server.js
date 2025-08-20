@@ -8,7 +8,7 @@ const mongoose = require("mongoose");
 const DbConfig = require("./config/db")
 const app = express();
 require("dotenv").config();
-// const teamRoutes = require('./routes/team');
+
 DbConfig();
 // Middleware
 app.use(cors());
