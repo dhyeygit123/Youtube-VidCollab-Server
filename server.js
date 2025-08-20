@@ -5,24 +5,33 @@ const videoRoutes = require('./routes/video');
 const teamRoutes = require('./routes/team');
 const googleRoutes = require('./routes/googleOAuth'); 
 const mongoose = require("mongoose");
-const DbConfig = require("./config/db")
-const app = express();
+const DbConfig = require("./config/db");
+const serverless = require('serverless-http');
 require("dotenv").config();
-// const teamRoutes = require('./routes/team');
+
+const app = express();
+
+// Connect DB
 DbConfig();
+
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-app.get('/', (req, res) => {
-  res.send('Welcome to the YouTube Collab Platform API 🚀');
-});
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/team', teamRoutes);
-app.use('/api/google', googleRoutes); 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.use('/api/google', googleRoutes);
+
+// Home route
+app.get('/', (req, res) => {
+  res.send('Welcome to the YouTube Collab Platform API 🚀');
+});
+
+// ❌ REMOVE app.listen
+// app.listen(PORT, ...)
+
+// ✅ Export as serverless function
+module.exports = app;
+module.exports.handler = serverless(app);
