@@ -5,19 +5,11 @@ const videoRoutes = require('./routes/video');
 const teamRoutes = require('./routes/team');
 const googleRoutes = require('./routes/googleOAuth'); 
 const mongoose = require("mongoose");
-const DbConfig = require("./config/db");
+const DbConfig = require("./config/db")
 const app = express();
 require("dotenv").config();
 
-(async () => {
-  try {
-    await DbConfig(); // Call connectDB
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error.message);
-    // Optionally, you can return a fallback response or shut down gracefully
-  }
-})();
-
+DbConfig();
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -31,5 +23,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/google', googleRoutes); 
-
-module.exports = app;
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -245,8 +245,6 @@ if (!channelCheck.data.items || channelCheck.data.items.length === 0) {
       { new: true }
     );
 
-    console.log("Dhyey")
-
     res.json({ message: 'Video approved and uploaded to YouTube' });
   } catch (error) {
     console.error(error);
