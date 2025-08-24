@@ -12,25 +12,11 @@ const router = express.Router();
 const fs = require("fs")
 require("dotenv").config();
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: './uploads/',
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    const filetypes = /mp4|mov|avi/;
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = filetypes.test(file.mimetype);
-    if (extname && mimetype) {
-      return cb(null, true);
-    }
-    cb(new Error('Only video files are allowed!'));
-  },
-});
+// Google Drive API
+const drive = google.drive({ version: 'v3', auth: googleAuth });
 
 // Get videos for dashboard (protected)
 router.get('/', authMiddleware, async (req, res) => {
@@ -47,137 +33,83 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Upload video route (protected for editors only)
-router.post('/upload', authMiddleware, upload.single('video'), async (req, res) => {
-  if (req.user.role !== 'editor') {
-    return res.status(403).json({ message: 'Only editors can upload videos' });
-  }
-
+router.post('/upload', upload.single('video'), async (req, res) => {
   try {
     const file = req.file;
-    if (!file) return res.status(400).json({ message: 'No file uploaded' });
+    const { title, description, youtuberId, editorId } = req.body;
 
-    // Find the editor and their youtuber
-    const editor = await User.findOne({ email: req.user.email });
-    if (!editor?.youtuberId) return res.status(400).json({ message: 'Editor not associated with a YouTuber' });
-
-    const youtuber = await User.findById(editor.youtuberId);
-    if (!youtuber) return res.status(400).json({ message: 'YouTuber not found' });
-    if (!youtuber.google?.refreshToken) {
-      return res.status(400).json({ message: 'Channel owner has not connected Google yet' });
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const drive = await driveFor(youtuber);
-
-    // Ensure a folder exists (saved during OAuth connect, but double-check)
-    let parentFolderId = youtuber.google.driveFolderId;
-    if (!parentFolderId) {
-      const created = await drive.files.create({
-        requestBody: { name: 'VidCollab Uploads', mimeType: 'application/vnd.google-apps.folder' },
-        fields: 'id'
-      });
-      parentFolderId = created.data.id;
-      youtuber.google.driveFolderId = parentFolderId;
-      await youtuber.save();
-    }
+    // Upload directly from memory buffer
+    const media = {
+      mimeType: file.mimetype,
+      body: Buffer.from(file.buffer), // ✅ Works on Vercel
+    };
 
     const fileMetadata = {
-      name: file.filename,
-      parents: [parentFolderId],
+      name: `${Date.now()}-${file.originalname}`,
+      parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
     };
-    const media = { mimeType: file.mimetype, body: fs.createReadStream(file.path) };
 
     const driveResponse = await drive.files.create({
       requestBody: fileMetadata,
       media,
-      fields: 'id, name, webViewLink',
+      fields: 'id, webViewLink',
     });
 
-    // Clean up temp file
-    fs.unlinkSync(file.path);
-
-    // Generate approval/reject tokens
-    const approvalToken = crypto.randomBytes(32).toString('hex');
-    const rejectToken = crypto.randomBytes(32).toString('hex');
-    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    // Persist video record
-    const video = new Video({
+    // Save video metadata to DB
+    const newVideo = new Video({
+      title,
+      description,
       fileId: driveResponse.data.id,
-      name: driveResponse.data.name,
-      link: driveResponse.data.webViewLink,
-      status: 'Action Pending',
-      uploadedBy: req.user.email,
-      youtuberId: youtuber._id,
-      approvalToken,
-      rejectToken,
-      tokenExpires,
+      driveLink: driveResponse.data.webViewLink,
+      youtuberId,
+      editorId,
+      status: 'Uploaded',
     });
-    await video.save();
 
-    const reviewUrl = `${process.env.FRONTEND_URL}/?page=approval&fileId=${video.fileId}&approveToken=${approvalToken}&rejectToken=${rejectToken}`;
+    await newVideo.save();
 
-    await sendNotificationEmail(
-      youtuber.email,
-      'New Video Uploaded for Review',
-      `A new video "${video.name}" has been uploaded for your review.\n\nReview it here: ${reviewUrl}`
-    );
-
-    res.status(200).json({
-      message: 'Video uploaded and notification sent',
-      fileId: video.fileId,
-      fileName: video.name,
-      fileLink: video.link,
-    });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ message: 'Error uploading video or sending notification' });
+    res.json({ success: true, video: newVideo });
+  } catch (err) {
+    console.error('Error uploading video:', err);
+    res.status(500).json({ error: 'Upload failed' });
   }
 });
 
-
-// Stream video file from Google Drive
+// ====================
+// 📌 Stream Video Route
+// ====================
 router.get('/stream/:fileId', async (req, res) => {
   const { fileId } = req.params;
   const range = req.headers.range;
-  if (!range) return res.status(400).send("Requires Range header");
+
+  if (!range) return res.status(400).send('Requires Range header');
 
   try {
     const video = await Video.findOne({ fileId });
     if (!video) return res.status(404).send('Video not found');
 
-    const youtuber = await User.findById(video.youtuberId);
-    if (!youtuber?.google?.refreshToken) return res.status(400).send('Channel owner not connected');
-
-    const drive = await driveFor(youtuber);
-
-    const fileInfo = await drive.files.get({ fileId, fields: 'size, mimeType' });
-    const fileSize = parseInt(fileInfo.data.size, 10);
-    const mimeType = fileInfo.data.mimeType || 'video/mp4';
-
-    const CHUNK_SIZE = 10 ** 6;
-    const start = Number(range.replace(/\D/g, ""));
-    const end = Math.min(start + CHUNK_SIZE - 1, fileSize - 1);
-    const contentLength = end - start + 1;
-
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': contentLength,
-      'Content-Type': mimeType,
-    });
-
-    const driveStream = await drive.files.get(
+    const driveResponse = await drive.files.get(
       { fileId, alt: 'media' },
-      { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } }
+      { responseType: 'stream' }
     );
 
-    driveStream.data.pipe(res);
-  } catch (error) {
-    console.error('Stream error:', error.message);
+    res.writeHead(206, {
+      'Content-Range': `bytes 0-*/*`,
+      'Accept-Ranges': 'bytes',
+      'Content-Type': 'video/mp4',
+    });
+
+    driveResponse.data.pipe(res);
+  } catch (err) {
+    console.error('Error streaming video:', err);
     res.status(500).send('Error streaming video');
   }
 });
+
 
 // Approve video (dashboard JSON endpoint)
 router.post('/approve-json/:videoId', authMiddleware, async (req, res) => {
